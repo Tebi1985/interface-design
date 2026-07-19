@@ -28,6 +28,16 @@ conexión** con una serie sintética.
    por nivel, plan operativo con stop/objetivos y relación riesgo-beneficio, y
    la distribución histórica de profundidades de retroceso.
 
+## Integración con el análisis de portfolio
+
+El mismo motor existe como **módulo embebible** en
+`.claude/skills/portfolio-analysis/assets/fibonacci-module.js`: la skill de
+análisis de portfolio lo incrusta en sus reportes HTML (sección "Análisis
+técnico φ por posición") con los tickers de la cartera precargados, y el
+reporte completo comparte este sistema de diseño
+(`.claude/skills/portfolio-analysis/references/estetica-phi.md`). Si se cambia
+la lógica de análisis acá, replicar el cambio en el módulo.
+
 ## Aviso
 
 Herramienta educativa. Las probabilidades describen el comportamiento pasado
