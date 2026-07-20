@@ -30,6 +30,24 @@ conexión** con una serie sintética.
    por nivel, plan operativo con stop/objetivos y relación riesgo-beneficio, y
    la distribución histórica de profundidades de retroceso.
 
+## Si falla la carga de datos: proxy propio (recomendado)
+
+La app llega a Yahoo/Stooq a través de proxies CORS públicos, que fallan
+seguido (bloquean archivos locales, se caen o limitan tráfico). La solución
+definitiva es un **proxy propio gratuito en Cloudflare Workers** (~5 min):
+
+1. Entrá a [dash.cloudflare.com](https://dash.cloudflare.com) (cuenta
+   gratuita) → **Workers & Pages** → **Create Worker** → Deploy.
+2. **Edit code** → borrá todo → pegá el contenido de
+   [`cors-proxy-worker.js`](cors-proxy-worker.js) → **Deploy**.
+3. Copiá la URL del worker (`https://<nombre>.<cuenta>.workers.dev`) y pegala
+   en el campo **"proxy propio"** que aparece en la pantalla de error de la
+   app o del módulo del reporte. Queda guardada en el navegador y se usa con
+   prioridad en todas las cargas siguientes.
+
+El worker solo permite Yahoo Finance y Stooq (no es un proxy abierto) y el
+plan gratuito de Cloudflare (100.000 requests/día) sobra para este uso.
+
 ## Integración con el análisis de portfolio
 
 El mismo motor existe como **módulo embebible** en

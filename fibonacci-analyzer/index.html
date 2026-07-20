@@ -125,6 +125,20 @@ footer{
 .state-card ul li{padding:3px 0 3px 16px;position:relative}
 .state-card ul li::before{content:"·";position:absolute;left:4px;color:var(--ink-3)}
 .state-card .actions{margin-top:18px;display:flex;gap:10px;justify-content:center}
+.diagbox{margin-top:12px;text-align:left;font-size:11px;color:var(--ink-3);border:1px solid var(--line);border-radius:8px;background:var(--inset);overflow:hidden}
+.diagbox summary{cursor:pointer;padding:7px 11px;color:var(--ink-2);font-weight:600;font-size:11.5px;list-style:none}
+.diagbox summary::-webkit-details-marker{display:none}
+.diagbox[open] summary{border-bottom:1px solid var(--line)}
+.diagbox ul,.diagbox ol{margin:0;padding:8px 12px 10px 28px;display:grid;gap:4px}
+.diagbox ul li{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);padding:0}
+.diagbox ul li::before{content:none}
+.guide li{font-size:11.5px;color:var(--ink-2);line-height:1.5;padding:0}
+.guide li::before{content:none}
+.guide li b{color:var(--ink)}
+.codebox{margin:4px 11px 11px;padding:10px;background:#0a0a08;border:1px solid var(--line);border-radius:6px;font:10px/1.55 var(--mono);text-align:left;overflow-x:auto;white-space:pre;color:var(--ink-2);user-select:all}
+.proxyrow{margin-top:14px;display:flex;gap:6px}
+.proxyrow input{flex:1;min-width:0;background:var(--inset);border:1px solid var(--line);border-radius:5px;padding:7px 10px;font:11.5px var(--mono);color:var(--ink)}
+.proxyrow input:focus{border-color:var(--gold-line);outline:none}
 
 /* ============================================================
    RESULTADOS
@@ -367,12 +381,27 @@ const escapeHtml=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",
 /* ================================================================
    1. DATOS — Yahoo Finance con proxies CORS de respaldo + demo
    ================================================================ */
-const PROXIES=[
-  u=>u,
-  u=>"https://corsproxy.io/?url="+encodeURIComponent(u),
-  u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
-  u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u),
-];
+/* Proxy propio (Cloudflare Worker) configurable: window.FIB_PROXY o localStorage "phi-proxy".
+   Es la ruta más confiable: los proxies públicos fallan seguido (bloquean Origin null de
+   archivos locales, se caen o limitan). El worker se crea gratis en ~5 min (guía en el
+   panel de error y en el README del analizador). */
+function customProxyURL(){
+  try{
+    const v=(window.FIB_PROXY||localStorage.getItem("phi-proxy")||"").trim();
+    return /^https?:\/\//.test(v)?v.replace(/\/+$/,""):null;
+  }catch(_){return null;}
+}
+function proxyRoutes(){
+  const pub=[
+    ["corsproxy.io",u=>"https://corsproxy.io/?url="+encodeURIComponent(u)],
+    ["allorigins",u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u)],
+    ["codetabs",u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)],
+    ["cors.lol",u=>"https://api.cors.lol/?url="+encodeURIComponent(u)],
+    ["cors.eu.org",u=>"https://cors.eu.org/"+u],
+  ];
+  const c=customProxyURL();
+  return c?[["proxy propio",u=>c+"/?url="+encodeURIComponent(u)],...pub]:pub;
+}
 async function fetchRaw(url,as,ms=9000){
   const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),ms);
   try{
@@ -399,72 +428,63 @@ function isSandboxed(){
     return window.self!==window.top;
   }catch(_){return true;}
 }
-function raceYahoo(urls,ms){
+/* carrera: dispara todas las rutas en paralelo; gana la primera respuesta VÁLIDA.
+   diag acumula el resultado de cada ruta para el panel "detalle técnico". */
+function raceRoutes(items,as,validate,ms,diag){
   return new Promise((resolve,reject)=>{
-    let pending=urls.length,lastErr=null,done=false;
-    urls.forEach(async u=>{
+    let pending=items.length,done=false;
+    if(!pending)return reject(new Error("sin rutas"));
+    items.forEach(async ([label,u])=>{
       try{
-        const j=await fetchRaw(u,"json",ms);
-        const res=j?.chart?.result?.[0];
-        if(!res){
-          const code=j?.chart?.error?.code||"";
-          if(/not found/i.test(code)||/no data/i.test(j?.chart?.error?.description||""))
-            throw Object.assign(new Error("NOTFOUND"),{notFound:true});
-          throw new Error(code||"respuesta vacía");
-        }
-        if(!done){done=true;resolve(parseYahoo(res));}
+        const raw=await fetchRaw(u,as,ms);
+        const parsed=validate(raw);
+        if(parsed==null)throw new Error("respuesta inválida");
+        if(diag)diag.push(label+": OK ✓");
+        if(!done){done=true;resolve(parsed);}
       }catch(e){
-        if(e.notFound&&!done){done=true;reject(e);return;}
-        lastErr=e;
-        if(--pending===0&&!done){done=true;reject(lastErr||new Error("sin rutas"));}
+        if(e&&e.notFound){if(!done){done=true;reject(e);}return;}
+        if(diag)diag.push(label+": "+String(e&&e.message||"error").slice(0,70));
+        if(--pending===0&&!done){done=true;reject(new Error("todas las rutas fallaron"));}
       }
     });
   });
 }
-function raceText(urls,validate,ms){
-  return new Promise((resolve,reject)=>{
-    let pending=urls.length,lastErr=null,done=false;
-    urls.forEach(async u=>{
-      try{
-        const t=await fetchRaw(u,"text",ms);
-        if(!validate(t))throw new Error("respuesta inválida");
-        if(!done){done=true;resolve(t);}
-      }catch(e){
-        lastErr=e;
-        if(--pending===0&&!done){done=true;reject(lastErr||new Error("sin rutas"));}
-      }
-    });
-  });
+function parseYahooChart(j){
+  const res=j?.chart?.result?.[0];
+  if(!res){
+    const code=j?.chart?.error?.code||"";
+    if(/not found/i.test(code)||/no data/i.test(j?.chart?.error?.description||""))
+      throw Object.assign(new Error("NOTFOUND"),{notFound:true});
+    return null;
+  }
+  return parseYahoo(res);
 }
-async function fetchHistory(sym,onStep){
-  /* Cadena de resiliencia (cada etapa corre sus rutas EN PARALELO):
-     1) Yahoo query1+query2 directos → 2) Yahoo vía proxies CORS → 3) respaldo Stooq. */
-  let lastErr=null;
+async function fetchHistory(sym,onStep,diag){
+  /* 10 años diarios (máximo confiable en Yahoo). Etapas en paralelo:
+     1) Yahoo directo (query1+query2) → 2) Yahoo vía proxies → 3) respaldo Stooq. */
   const yUrl=h=>`https://${h}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%2Csplit`;
+  const P=proxyRoutes();
   onStep("Conectando con Yahoo Finance…");
-  try{return await raceYahoo([yUrl("query1"),yUrl("query2")],4500);}
-  catch(e){if(e.notFound)throw e;lastErr=e;}
-  onStep("Sin respuesta directa; probando proxies en paralelo…");
-  try{return await raceYahoo([
-    PROXIES[1](yUrl("query1")),PROXIES[2](yUrl("query1")),PROXIES[3](yUrl("query1")),PROXIES[2](yUrl("query2")),
-  ],9000);}
-  catch(e){if(e.notFound)throw e;lastErr=e;}
+  try{return await raceRoutes([["query1 directo",yUrl("query1")],["query2 directo",yUrl("query2")]],"json",parseYahooChart,4500,diag);}
+  catch(e){if(e.notFound)throw e;}
+  onStep("Sin respuesta directa; probando "+P.length+" proxies en paralelo…");
+  try{return await raceRoutes(P.map(([l,fn])=>[l,fn(yUrl("query1"))]),"json",parseYahooChart,9000,diag);}
+  catch(e){if(e.notFound)throw e;}
   if(!sym.includes(".")){
     onStep("Yahoo no responde; probando fuente de respaldo (Stooq)…");
     const sUrl=`https://stooq.com/q/d/l/?s=${sym.toLowerCase()}.us&i=d`;
-    try{
-      const txt=await raceText([PROXIES[1](sUrl),PROXIES[2](sUrl),PROXIES[3](sUrl)],
-        t=>/^Date,/m.test(String(t).slice(0,300)),9000);
+    const parseS=txt=>{
+      if(!/^Date,/m.test(String(txt).slice(0,300)))return null;
       const cut=Date.now()-3653*864e5;
       const bars=parseStooqCSV(txt).filter(b=>b.t>=cut);
-      if(bars.length>=120)
-        return {bars,meta:{symbol:sym,name:"",currency:"USD",exchange:"Stooq · fuente de respaldo"}};
-      lastErr=new Error("CSV insuficiente");
-    }catch(e){lastErr=e;}
+      return bars.length>=120?{bars,meta:{symbol:sym,name:"",currency:"USD",exchange:"Stooq · fuente de respaldo"}}:null;
+    };
+    try{return await raceRoutes(P.map(([l,fn])=>["stooq·"+l,fn(sUrl)]),"text",parseS,9000,diag);}
+    catch(e){}
   }
-  throw new Error("No se pudieron traer los precios ("+(lastErr?.message||"sin conexión")+")."+(isSandboxed()
-    ?" ATENCIÓN: este reporte está corriendo dentro de una vista previa embebida que bloquea las conexiones externas — descargá el archivo HTML y abrilo directamente en tu navegador (doble click)."
-    :" Los proxies públicos fallan a veces — suele resolverse reintentando en unos segundos."));
+  throw new Error(isSandboxed()
+    ?"Este reporte está corriendo dentro de una vista previa embebida que bloquea las conexiones externas — descargá el archivo HTML y abrilo directamente en tu navegador (doble click)."
+    :"Ninguna ruta de datos respondió desde tu red. La solución definitiva es un proxy propio gratuito (~5 min): guía y código abajo.");
 }
 function parseYahoo(res){
   const q=res.indicators?.quote?.[0]||{};
@@ -828,20 +848,45 @@ function renderLoading(sym){
     <div class="msg" id="loadMsg">Preparando…</div>
   </div>`;
 }
-function renderError(sym,err){
+function renderError(sym,err,diag){
   showTopSearch(true);
   const notFound=err?.notFound;
+  const saved=(()=>{try{return localStorage.getItem("phi-proxy")||"";}catch(_){return"";}})();
+  const diagHtml=(diag&&diag.length)?`
+    <details class="diagbox"><summary>Detalle técnico por ruta (${diag.length})</summary>
+      <ul>${diag.map(d=>`<li>${escapeHtml(d)}</li>`).join("")}</ul></details>`:"";
+  const proxyHtml=notFound?"":`
+    <div class="proxyrow">
+      <input placeholder="https://mi-proxy.workers.dev" value="${escapeHtml(saved)}" aria-label="URL de tu proxy propio">
+      <button class="btn" data-saveproxy>Usar proxy propio</button>
+    </div>
+    <details class="diagbox"><summary>Crear un proxy propio (gratis, ~5 min) — solución definitiva</summary>
+      <ol class="guide">
+        <li>Entrá a <b>dash.cloudflare.com</b> (cuenta gratuita) → <b>Workers &amp; Pages</b> → <b>Create Worker</b> → Deploy.</li>
+        <li>Tocá <b>Edit code</b>, borrá todo, pegá el código de abajo y dale <b>Deploy</b>.</li>
+        <li>Copiá la URL del worker (https://…workers.dev), pegala arriba y tocá "Usar proxy propio".</li>
+      </ol>
+      <pre class="codebox">export default{async fetch(req){
+  const u=new URL(req.url).searchParams.get("url");
+  if(!u||!/^https:\\/\\/(query[12]\\.finance\\.yahoo\\.com|stooq\\.com)\\//.test(u))
+    return new Response("no permitido",{status:400});
+  const r=await fetch(u,{headers:{"User-Agent":"Mozilla/5.0"}});
+  const h=new Headers(r.headers);
+  h.set("Access-Control-Allow-Origin","*");h.delete("set-cookie");
+  return new Response(r.body,{status:r.status,headers:h});
+}}</pre>
+    </details>`;
   app.innerHTML=`
   <div class="state-card error">
     <h2>${notFound?"Ticker no encontrado":"No se pudieron obtener los datos"}</h2>
     <div class="msg">${notFound
       ?`Yahoo Finance no reconoce <b class="mono">${escapeHtml(sym)}</b>.`
       :escapeHtml(err?.message||"Error de red.")}</div>
-    <ul>
+    ${notFound?`<ul>
       <li>Verificá el símbolo exacto en finance.yahoo.com</li>
       <li>Acciones fuera de EE.UU. llevan sufijo: <span class="mono">GGAL.BA</span>, <span class="mono">SAN.MC</span>, <span class="mono">VALE3.SA</span></li>
-      ${notFound?"":"<li>Si el bloqueo es de red/CORS, reintentá en unos segundos: se prueban varios proxies</li>"}
-    </ul>
+    </ul>`:""}
+    ${diagHtml}${proxyHtml}
     <div class="actions">
       <button class="btn" id="retryBtn">Reintentar</button>
       <button class="chip-btn" data-sym="DEMO">Ver demo</button>
@@ -849,6 +894,13 @@ function renderError(sym,err){
   </div>`;
   $("#retryBtn").addEventListener("click",()=>go(sym));
   app.querySelector("[data-sym]").addEventListener("click",()=>go("DEMO"));
+  const sp=app.querySelector("[data-saveproxy]");
+  if(sp)sp.addEventListener("click",()=>{
+    const v=app.querySelector(".proxyrow input").value.trim();
+    try{if(v)localStorage.setItem("phi-proxy",v);else localStorage.removeItem("phi-proxy");}catch(_){}
+    window.FIB_PROXY=v||undefined;
+    go(sym);
+  });
 }
 
 /* ================================================================
@@ -1354,8 +1406,9 @@ async function go(symRaw){
   if(!sym)return;
   renderLoading(sym);
   const onStep=m=>{const el=$("#loadMsg");if(el)el.textContent=m;};
+  const diag=[];
   try{
-    const data=sym==="DEMO"?demoData():await fetchHistory(sym,onStep);
+    const data=sym==="DEMO"?demoData():await fetchHistory(sym,onStep,diag);
     if(!data.bars||data.bars.length<120)
       throw new Error("Histórico insuficiente ("+(data.bars?.length||0)+" sesiones): se necesitan al menos 120 para un análisis serio.");
     const spc=medianSpacingDays(data.bars);
@@ -1367,7 +1420,7 @@ async function go(symRaw){
     if(!state.an)throw new Error("No se pudo identificar un impulso significativo en la serie.");
     const ti=$("#topInput");if(ti)ti.value=data.meta.symbol;
     renderResults();
-  }catch(e){renderError(sym,e);}
+  }catch(e){renderError(sym,e,diag);}
 }
 $("#topSearch").addEventListener("submit",e=>{e.preventDefault();go($("#topInput").value);});
 renderHero();
