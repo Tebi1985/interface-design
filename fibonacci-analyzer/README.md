@@ -6,14 +6,21 @@ clara con probabilidades empíricas.
 
 ## Uso
 
-Abrí `index.html` en cualquier navegador moderno e ingresá un ticker
+**Online (recomendado):** https://tebi1985.github.io/interface-design/ —
+se publica automáticamente desde este repo con GitHub Pages. Al correr desde
+una URL real (no un archivo local con `Origin: null`) los proxies CORS
+aceptan el origen y la carga de datos es mucho más confiable.
+
+**Local:** abrí `index.html` en cualquier navegador moderno e ingresá un ticker
 (ej. `AAPL`, `MSFT`, `GGAL.BA`, `SAN.MC`). También hay un **modo demo sin
 conexión** con una serie sintética.
 
 ## Qué hace
 
-1. **Descarga todo el histórico** diario del ticker desde Yahoo Finance
-   (con proxies CORS de respaldo si el acceso directo falla).
+1. **Descarga 10 años de histórico diario** del ticker desde Yahoo Finance
+   (con proxies CORS de respaldo si el acceso directo falla). Se limita a 10
+   años porque es el máximo con granularidad diaria confiable — y porque los
+   niveles técnicos pierden sentido más allá de la memoria del mercado.
 2. **Detecta el impulso vigente** según el horizonte elegido (corto / medio /
    largo) y traza retrocesos (23,6 · 38,2 · 50 · 61,8 · 78,6%) y extensiones
    (127,2 · 161,8 · 200%), con detección de *golden pocket* y confluencias con
@@ -27,6 +34,24 @@ conexión** con una serie sintética.
    escenarios con probabilidades, escalera de niveles con probabilidad de toque
    por nivel, plan operativo con stop/objetivos y relación riesgo-beneficio, y
    la distribución histórica de profundidades de retroceso.
+
+## Si falla la carga de datos: proxy propio (recomendado)
+
+La app llega a Yahoo/Stooq a través de proxies CORS públicos, que fallan
+seguido (bloquean archivos locales, se caen o limitan tráfico). La solución
+definitiva es un **proxy propio gratuito en Cloudflare Workers** (~5 min):
+
+1. Entrá a [dash.cloudflare.com](https://dash.cloudflare.com) (cuenta
+   gratuita) → **Workers & Pages** → **Create Worker** → Deploy.
+2. **Edit code** → borrá todo → pegá el contenido de
+   [`cors-proxy-worker.js`](cors-proxy-worker.js) → **Deploy**.
+3. Copiá la URL del worker (`https://<nombre>.<cuenta>.workers.dev`) y pegala
+   en el campo **"proxy propio"** que aparece en la pantalla de error de la
+   app o del módulo del reporte. Queda guardada en el navegador y se usa con
+   prioridad en todas las cargas siguientes.
+
+El worker solo permite Yahoo Finance y Stooq (no es un proxy abierto) y el
+plan gratuito de Cloudflare (100.000 requests/día) sobra para este uso.
 
 ## Integración con el análisis de portfolio
 

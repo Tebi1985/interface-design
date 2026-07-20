@@ -58,7 +58,20 @@ const CSS=`
 }
 .fibm .f-free button:active{transform:scale(.97)}
 
-.fibm .f-state{border:1px solid var(--fline);border-radius:10px;background:var(--fpanel);padding:26px;text-align:center;max-width:460px;margin:0 auto}
+.fibm .f-state{border:1px solid var(--fline);border-radius:10px;background:var(--fpanel);padding:26px;text-align:center;max-width:560px;margin:0 auto}
+.fibm .f-diag{margin-top:12px;text-align:left;font-size:11px;color:var(--fink3);border:1px solid var(--fline);border-radius:8px;background:var(--finset);overflow:hidden}
+.fibm .f-diag summary{cursor:pointer;padding:7px 11px;color:var(--fink2);font-weight:600;font-size:11.5px;list-style:none}
+.fibm .f-diag summary::-webkit-details-marker{display:none}
+.fibm .f-diag[open] summary{border-bottom:1px solid var(--fline)}
+.fibm .f-diag ul,.fibm .f-diag ol{margin:0;padding:8px 12px 10px 28px;display:grid;gap:4px}
+.fibm .f-diag ul li{font-family:var(--fmono);font-size:10.5px;color:var(--fink2)}
+.fibm .f-guide li{font-size:11.5px;color:var(--fink2);line-height:1.5}
+.fibm .f-guide li b{color:var(--fink)}
+.fibm .f-code{margin:4px 11px 11px;padding:10px;background:#0a0a08;border:1px solid var(--fline);border-radius:6px;font:10px/1.55 var(--fmono);text-align:left;overflow-x:auto;white-space:pre;color:var(--fink2);user-select:all}
+.fibm .f-proxyrow{margin-top:14px;display:flex;gap:6px}
+.fibm .f-proxyrow input{flex:1;min-width:0;background:var(--finset);border:1px solid var(--fline);border-radius:5px;padding:7px 10px;font:11.5px var(--fmono);color:var(--fink)}
+.fibm .f-proxyrow input:focus{border-color:var(--fgold-line);outline:none}
+.fibm .f-proxyrow button{background:var(--fgold-soft);border:1px solid var(--fgold-line);color:var(--fgold-ink);border-radius:5px;padding:7px 12px;font-weight:600;font-size:11.5px;white-space:nowrap}
 .fibm .f-spinner{width:28px;height:28px;margin:0 auto 14px;border-radius:50%;border:2px solid var(--fline-strong);border-top-color:var(--fgold);animation:fibmspin .8s linear infinite}
 @keyframes fibmspin{to{transform:rotate(360deg)}}
 .fibm .f-state h4{font-size:14px;font-weight:600}
@@ -116,6 +129,15 @@ const CSS=`
 .fibm .lg i{width:14px;height:0;border-top:2px solid;display:block;border-radius:1px}
 .fibm .lg i.dash{border-top-style:dashed}
 .fibm .lg i.band{height:8px;border:none;border-radius:2px}
+.fibm .f-help{margin:0 0 12px;border:1px solid var(--fline);border-radius:8px;background:var(--finset);overflow:hidden}
+.fibm .f-help summary{cursor:pointer;padding:8px 12px;font-size:12px;font-weight:600;color:var(--fgold-ink);list-style:none;display:flex;align-items:center;gap:8px}
+.fibm .f-help summary::-webkit-details-marker{display:none}
+.fibm .f-help summary::before{content:"?";display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--fgold-line);background:var(--fgold-soft);font:600 10px var(--fmono);flex:0 0 auto}
+.fibm .f-help summary span{font-weight:400;color:var(--fink3);font-size:11px}
+.fibm .f-help[open] summary{border-bottom:1px solid var(--fline)}
+.fibm .f-help ol{margin:0;padding:10px 14px 12px 30px;display:grid;gap:6px}
+.fibm .f-help li{font-size:12px;color:var(--fink2);line-height:1.5}
+.fibm .f-help li b{color:var(--fink);font-weight:600}
 .fibm .chart-wrap{position:relative}
 .fibm .f-canvas{width:100%;display:block;border-radius:5px}
 .fibm .f-tip{position:absolute;pointer-events:none;background:var(--fpanel2);border:1px solid var(--fline-strong);
@@ -213,38 +235,110 @@ function rsi14(c){
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 /* ---------------- datos ---------------- */
-const PROXIES=[
-  u=>u,
-  u=>"https://corsproxy.io/?url="+encodeURIComponent(u),
-  u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
-  u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u),
-];
-async function fetchJSON(url,ms=12000){
+/* Proxy propio (Cloudflare Worker) configurable: window.FIB_PROXY o localStorage "phi-proxy".
+   Es la ruta más confiable: los proxies públicos fallan seguido (bloquean Origin null de
+   archivos locales, se caen o limitan). El worker se crea gratis en ~5 min (guía en el
+   panel de error y en el README del analizador). */
+function customProxyURL(){
+  try{
+    const v=(window.FIB_PROXY||localStorage.getItem("phi-proxy")||"").trim();
+    return /^https?:\/\//.test(v)?v.replace(/\/+$/,""):null;
+  }catch(_){return null;}
+}
+function proxyRoutes(){
+  const pub=[
+    ["corsproxy.io",u=>"https://corsproxy.io/?url="+encodeURIComponent(u)],
+    ["allorigins",u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u)],
+    ["codetabs",u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)],
+    ["cors.lol",u=>"https://api.cors.lol/?url="+encodeURIComponent(u)],
+    ["cors.eu.org",u=>"https://cors.eu.org/"+u],
+  ];
+  const c=customProxyURL();
+  return c?[["proxy propio",u=>c+"/?url="+encodeURIComponent(u)],...pub]:pub;
+}
+async function fetchRaw(url,as,ms=9000){
   const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),ms);
   try{
     const r=await fetch(url,{signal:ctl.signal});
     if(!r.ok)throw new Error("HTTP "+r.status);
-    return await r.json();
+    return as==="json"?await r.json():await r.text();
   }finally{clearTimeout(t);}
 }
-async function fetchHistory(sym,onStep){
-  const base=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=max&interval=1d&events=div%2Csplit`;
-  let lastErr=null;
-  for(let i=0;i<PROXIES.length;i++){
-    onStep(i===0?"Conectando con Yahoo Finance…":`Reintentando vía proxy alternativo (${i}/${PROXIES.length-1})…`);
-    try{
-      const j=await fetchJSON(PROXIES[i](base));
-      const res=j?.chart?.result?.[0];
-      if(!res){
-        const code=j?.chart?.error?.code||"";
-        if(/not found/i.test(code)||/no data/i.test(j?.chart?.error?.description||""))
-          throw Object.assign(new Error("NOTFOUND"),{notFound:true});
-        throw new Error(code||"respuesta vacía");
-      }
-      return parseYahoo(res);
-    }catch(e){if(e.notFound)throw e;lastErr=e;}
+function parseStooqCSV(txt){
+  const lines=String(txt).trim().split(/\r?\n/);
+  const bars=[];
+  for(let i=1;i<lines.length;i++){
+    const p=lines[i].split(",");
+    if(p.length<5)continue;
+    const t=Date.parse(p[0]);const c=parseFloat(p[4]);
+    if(!isFinite(t)||!isFinite(c)||c<=0)continue;
+    bars.push({t,o:parseFloat(p[1])||c,h:parseFloat(p[2])||c,l:parseFloat(p[3])||c,c,v:parseFloat(p[5])||0});
   }
-  throw new Error("No se pudo descargar el histórico ("+(lastErr?.message||"sin conexión")+").");
+  return bars;
+}
+function isSandboxed(){
+  try{
+    if(!/^(https?|file):/.test(location.protocol))return true;
+    return window.self!==window.top;
+  }catch(_){return true;}
+}
+/* carrera: dispara todas las rutas en paralelo; gana la primera respuesta VÁLIDA.
+   diag acumula el resultado de cada ruta para el panel "detalle técnico". */
+function raceRoutes(items,as,validate,ms,diag){
+  return new Promise((resolve,reject)=>{
+    let pending=items.length,done=false;
+    if(!pending)return reject(new Error("sin rutas"));
+    items.forEach(async ([label,u])=>{
+      try{
+        const raw=await fetchRaw(u,as,ms);
+        const parsed=validate(raw);
+        if(parsed==null)throw new Error("respuesta inválida");
+        if(diag)diag.push(label+": OK ✓");
+        if(!done){done=true;resolve(parsed);}
+      }catch(e){
+        if(e&&e.notFound){if(!done){done=true;reject(e);}return;}
+        if(diag)diag.push(label+": "+String(e&&e.message||"error").slice(0,70));
+        if(--pending===0&&!done){done=true;reject(new Error("todas las rutas fallaron"));}
+      }
+    });
+  });
+}
+function parseYahooChart(j){
+  const res=j?.chart?.result?.[0];
+  if(!res){
+    const code=j?.chart?.error?.code||"";
+    if(/not found/i.test(code)||/no data/i.test(j?.chart?.error?.description||""))
+      throw Object.assign(new Error("NOTFOUND"),{notFound:true});
+    return null;
+  }
+  return parseYahoo(res);
+}
+async function fetchHistory(sym,onStep,diag){
+  /* 10 años diarios (máximo confiable en Yahoo). Etapas en paralelo:
+     1) Yahoo directo (query1+query2) → 2) Yahoo vía proxies → 3) respaldo Stooq. */
+  const yUrl=h=>`https://${h}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%2Csplit`;
+  const P=proxyRoutes();
+  onStep("Conectando con Yahoo Finance…");
+  try{return await raceRoutes([["query1 directo",yUrl("query1")],["query2 directo",yUrl("query2")]],"json",parseYahooChart,4500,diag);}
+  catch(e){if(e.notFound)throw e;}
+  onStep("Sin respuesta directa; probando "+P.length+" proxies en paralelo…");
+  try{return await raceRoutes(P.map(([l,fn])=>[l,fn(yUrl("query1"))]),"json",parseYahooChart,9000,diag);}
+  catch(e){if(e.notFound)throw e;}
+  if(!sym.includes(".")){
+    onStep("Yahoo no responde; probando fuente de respaldo (Stooq)…");
+    const sUrl=`https://stooq.com/q/d/l/?s=${sym.toLowerCase()}.us&i=d`;
+    const parseS=txt=>{
+      if(!/^Date,/m.test(String(txt).slice(0,300)))return null;
+      const cut=Date.now()-3653*864e5;
+      const bars=parseStooqCSV(txt).filter(b=>b.t>=cut);
+      return bars.length>=120?{bars,meta:{symbol:sym,name:"",currency:"USD",exchange:"Stooq · fuente de respaldo"}}:null;
+    };
+    try{return await raceRoutes(P.map(([l,fn])=>["stooq·"+l,fn(sUrl)]),"text",parseS,9000,diag);}
+    catch(e){}
+  }
+  throw new Error(isSandboxed()
+    ?"Este reporte está corriendo dentro de una vista previa embebida que bloquea las conexiones externas — descargá el archivo HTML y abrilo directamente en tu navegador (doble click)."
+    :"Ninguna ruta de datos respondió desde tu red. La solución definitiva es un proxy propio gratuito (~5 min): guía y código abajo.");
 }
 function parseYahoo(res){
   const q=res.indicators?.quote?.[0]||{};
@@ -277,11 +371,21 @@ function demoData(){
 }
 
 /* ---------------- motor de análisis ---------------- */
+/* Ventanas definidas por FECHA (días calendario), no por cantidad de velas:
+   así una serie con huecos o granularidad inesperada no distorsiona el grado del swing.
+   Regla: la ventana de análisis ≈ 2-4× el horizonte de decisión. */
 const HORIZONS={
-  corto:{label:"Corto",lookback:190,base:5,desc:"~9 meses de vista, swings de grado menor"},
-  medio:{label:"Medio",lookback:520,base:9,desc:"~2 años de vista, swings intermedios"},
-  largo:{label:"Largo",lookback:2000,base:15,desc:"~8 años de vista, swings mayores"},
+  corto:{label:"Corto",days:270,base:5,desc:"~9 meses de vista · para decisiones de semanas a 6 meses"},
+  medio:{label:"Medio",days:730,base:9,desc:"~2 años de vista · swings intermedios"},
+  largo:{label:"Largo",days:1825,base:15,desc:"~5 años de vista · estructura mayor (contexto)"},
 };
+function medianSpacingDays(bars){
+  if(bars.length<30)return 1;
+  const gaps=[];
+  for(let i=1;i<Math.min(bars.length,400);i++)gaps.push(bars[i].t-bars[i-1].t);
+  gaps.sort((a,b)=>a-b);
+  return gaps[Math.floor(gaps.length/2)]/864e5;
+}
 const RETS=[0.236,0.382,0.5,0.618,0.786];
 const EXTS=[1.272,1.618,2.0];
 const PRIOR_W=6;
@@ -422,8 +526,15 @@ function analyze(bars,horizonKey){
   const H=HORIZONS[horizonKey];
   const closes=bars.map(b=>b.c);
   const last=bars.length-1,price=closes[last];
-  const wLen=Math.min(H.lookback,bars.length-1);
-  const wStart=bars.length-wLen;
+  const lastT=bars[last].t;
+  /* inicio de ventana por FECHA: primer índice dentro de los últimos H.days días */
+  const winStart=days=>{
+    const cut=lastT-days*864e5;
+    let i=bars.findIndex(b=>b.t>=cut);
+    if(i<0)i=0;
+    return Math.max(0,Math.min(i,last-40));
+  };
+  const wStart=winStart(H.days);
   const volD=stdev(rets(closes.slice(wStart)));
   const thr=clamp(Math.max(H.base,volD*100*5.5),H.base,30);
   const piv=zigzag(bars,thr);
@@ -441,8 +552,7 @@ function analyze(bars,horizonKey){
   const upKey=horizonKey==="corto"?"medio":horizonKey==="medio"?"largo":null;
   let confl=[];
   if(upKey){
-    const uw=Math.min(HORIZONS[upKey].lookback,bars.length-1);
-    const sw2=pickSwing(bars,bars.length-uw);
+    const sw2=pickSwing(bars,winStart(HORIZONS[upKey].days));
     if(sw2&&sw2.up===sw.up){
       for(const r of RETS)confl.push(levelPrice(sw2,r));
       confl.push(sw2.A.p,sw2.B.p);
@@ -556,7 +666,7 @@ function initFibonacciModule(container,opts={}){
     <div class="f-body"></div>`;
   container.appendChild(root);
   const body=root.querySelector(".f-body");
-  const state={data:null,horizon:opts.horizon||"medio",an:null,sym:null};
+  const state={data:null,horizon:opts.horizon||"corto",an:null,sym:null};
   let chartGeom=null;
 
   root.querySelectorAll(".f-picker [data-sym]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.sym)));
@@ -579,21 +689,58 @@ function initFibonacciModule(container,opts={}){
       <h4>Analizando <span class="f-mono">${esc(sym)}</span></h4>
       <div class="msg" data-role="loadmsg">Preparando…</div></div>`;
     const onStep=m=>{const el=body.querySelector('[data-role="loadmsg"]');if(el)el.textContent=m;};
+    const diag=[];
     try{
-      const data=sym==="DEMO"?demoData():await fetchHistory(sym,onStep);
+      const data=sym==="DEMO"?demoData():await fetchHistory(sym,onStep,diag);
       if(!data.bars||data.bars.length<120)
         throw new Error("Histórico insuficiente ("+(data.bars?.length||0)+" sesiones).");
+      const spc=medianSpacingDays(data.bars);
+      if(spc>2.6)
+        throw new Error("La fuente devolvió velas de ~"+Math.round(spc)+" días en lugar de diarias; el análisis perdería sentido. Reintentá en unos segundos.");
       onStep("Detectando swings y calculando probabilidades…");
       state.data=data;
       state.an=analyze(data.bars,state.horizon);
       if(!state.an)throw new Error("No se pudo identificar un impulso significativo en la serie.");
       render();
     }catch(e){
+      const saved=(()=>{try{return localStorage.getItem("phi-proxy")||"";}catch(_){return"";}})();
+      const diagHtml=diag.length?`
+        <details class="f-diag"><summary>Detalle técnico por ruta (${diag.length})</summary>
+          <ul>${diag.map(d=>`<li>${esc(d)}</li>`).join("")}</ul></details>`:"";
+      const proxyHtml=e.notFound?"":`
+        <div class="f-proxyrow">
+          <input placeholder="https://mi-proxy.workers.dev" value="${esc(saved)}" aria-label="URL de tu proxy propio">
+          <button data-saveproxy>Usar proxy propio</button>
+        </div>
+        <details class="f-diag"><summary>Crear un proxy propio (gratis, ~5 min) — solución definitiva</summary>
+          <ol class="f-guide">
+            <li>Entrá a <b>dash.cloudflare.com</b> (cuenta gratuita) → <b>Workers &amp; Pages</b> → <b>Create Worker</b> → Deploy.</li>
+            <li>Tocá <b>Edit code</b>, borrá todo, pegá el código de abajo y dale <b>Deploy</b>.</li>
+            <li>Copiá la URL del worker (https://…workers.dev), pegala arriba y tocá "Usar proxy propio".</li>
+          </ol>
+          <pre class="f-code">export default{async fetch(req){
+  const u=new URL(req.url).searchParams.get("url");
+  if(!u||!/^https:\\/\\/(query[12]\\.finance\\.yahoo\\.com|stooq\\.com)\\//.test(u))
+    return new Response("no permitido",{status:400});
+  const r=await fetch(u,{headers:{"User-Agent":"Mozilla/5.0"}});
+  const h=new Headers(r.headers);
+  h.set("Access-Control-Allow-Origin","*");h.delete("set-cookie");
+  return new Response(r.body,{status:r.status,headers:h});
+}}</pre>
+        </details>`;
       body.innerHTML=`<div class="f-state err">
         <h4>${e.notFound?"Ticker no encontrado":"No se pudieron obtener los datos"}</h4>
         <div class="msg">${e.notFound?`Yahoo Finance no reconoce <b class="f-mono">${esc(sym)}</b>.`:esc(e.message||"Error de red.")}</div>
+        ${diagHtml}${proxyHtml}
         <div class="actions"><button class="f-chip" data-retry>Reintentar</button></div></div>`;
       body.querySelector("[data-retry]").addEventListener("click",()=>go(sym));
+      const sp=body.querySelector("[data-saveproxy]");
+      if(sp)sp.addEventListener("click",()=>{
+        const v=body.querySelector(".f-proxyrow input").value.trim();
+        try{if(v)localStorage.setItem("phi-proxy",v);else localStorage.removeItem("phi-proxy");}catch(_){}
+        window.FIB_PROXY=v||undefined;
+        go(sym);
+      });
     }
   }
 
@@ -740,13 +887,24 @@ function initFibonacciModule(container,opts={}){
           <span class="n">${fmtN(sw.A.p)} → ${fmtN(sw.B.p)} · ${fmtDateS(sw.A.t)} – ${fmtDateS(sw.B.t)} · umbral zigzag ${fmtN(an.thr,1)}%</span></h5>
         <div class="f-legend">
           <span class="lg"><i style="border-color:var(--fink)"></i>Precio</span>
-          <span class="lg"><i class="dash" style="border-color:var(--fink3)"></i>SMA200</span>
-          <span class="lg"><i style="border-color:var(--fgold)"></i>Retrocesos</span>
-          <span class="lg"><i class="dash" style="border-color:var(--fext)"></i>Extensiones</span>
-          <span class="lg"><i class="band" style="background:var(--fgold-soft);border:1px solid var(--fgold-line)"></i>Golden pocket 61,8–65%</span>
+          <span class="lg"><i style="border-color:${sw.up?"var(--fup)":"var(--fdown)"}"></i>Impulso A→B</span>
+          <span class="lg"><i class="dash" style="border-color:var(--fink3)"></i>SMA200 (tendencia)</span>
+          <span class="lg"><i style="border-color:var(--fgold)"></i>Retrocesos (soportes)</span>
+          <span class="lg"><i class="dash" style="border-color:var(--fext)"></i>Extensiones (objetivos)</span>
+          <span class="lg"><i class="band" style="background:var(--fgold-soft);border:1px solid var(--fgold-line)"></i>Golden pocket</span>
         </div>
+        <details class="f-help">
+          <summary>¿Cómo leer este gráfico? <span>guía rápida para principiantes</span></summary>
+          <ol>
+            <li><b>La flecha ${sw.up?"verde":"roja"} es el impulso:</b> el último movimiento fuerte del precio (de <b>A</b> a <b>B</b>). Todo Fibonacci se mide sobre ese tramo.</li>
+            <li><b>Tras el impulso el precio retrocede</b> y suele frenarse en las <b>líneas doradas</b> (posibles ${sw.up?"soportes donde rebotar":"resistencias donde caer"}). La banda <b>golden pocket (61,8–65%)</b> es la más observada del mercado.</li>
+            <li><b>Si retoma la dirección del impulso</b>, las <b>líneas azules punteadas</b> son los objetivos (extensiones 127% · 162% · 200%).</li>
+            <li><b>La línea 100% es la invalidación:</b> si el precio la cruza, el conteo deja de valer y la lectura cambia.</li>
+            <li>La <b>escalera de la derecha</b> lista cada nivel con su precio y la <b>probabilidad histórica</b> de que el precio lo toque, calculada con el propio comportamiento de este papel.</li>
+          </ol>
+        </details>
         <div class="chart-wrap">
-          <canvas class="f-canvas" height="430" aria-label="Gráfico de precios con niveles de Fibonacci"></canvas>
+          <canvas class="f-canvas" height="452" aria-label="Gráfico de precios con niveles de Fibonacci"></canvas>
           <div class="f-tip"></div>
         </div>
       </section>
@@ -776,7 +934,7 @@ function initFibonacciModule(container,opts={}){
         <div class="kv">
           <div class="r"><span>Nivel de invalidación</span><b class="${sw.up?"down":"up"}">${fmtN(sw.A.p)}</b></div>
           <div class="r"><span>Distancia desde el precio</span><b>${fmtPct((sw.A.p/price-1)*100,1)}</b></div>
-          <div class="r"><span>Referencia posterior</span><b class="${sw.up?"down":"up"}">${fmtN(sw.up?sw.A.p-0.272*sw.range:sw.A.p+0.272*sw.range)}</b></div>
+          <div class="r"><span>Referencia posterior</span><b class="${sw.up?"down":"up"}">${(()=>{const ref=sw.up?sw.A.p-0.272*sw.range:sw.A.p+0.272*sw.range;return ref>0?fmtN(ref):"—";})()}</b></div>
         </div>
       </section>
 
@@ -788,7 +946,7 @@ function initFibonacciModule(container,opts={}){
 
       <section class="f-card f-dist">
         <h5>¿Dónde terminan los ${sw.up?"retrocesos":"rebotes"} de ${esc(meta.symbol)}?
-          <span class="n">n=${dCases.length} swings ${sw.up?"alcistas":"bajistas"} en todo el histórico</span></h5>
+          <span class="n">n=${dCases.length} swings ${sw.up?"alcistas":"bajistas"} en los últimos 10 años</span></h5>
         ${distBins.map(([lb,a,b],i)=>{
           const n=dCases.filter(c=>c.depth>=a&&c.depth<b).length;
           const pct=dCases.length?n/dCases.length*100:0;
@@ -816,7 +974,7 @@ function initFibonacciModule(container,opts={}){
       <p class="f-method">
         <b>Método.</b> El impulso vigente se define por el extremo dominante de la ventana del horizonte y su origen.
         Sobre él se proyectan retrocesos (23,6 · 38,2 · 50 · 61,8 · 78,6%) y extensiones (127,2 · 161,8 · 200%).
-        Las probabilidades se estiman contando, en todo el histórico del papel, qué hizo el precio en situaciones
+        Las probabilidades se estiman contando, en los últimos 10 años del papel (velas diarias), qué hizo el precio en situaciones
         comparables, con corrección bayesiana suave para muestras chicas. Datos técnicos en vivo al momento de abrir
         el reporte — pueden diferir del snapshot del análisis fundamental. No constituye asesoramiento financiero.
       </p>
@@ -837,19 +995,26 @@ function initFibonacciModule(container,opts={}){
     const an=state.an,{sw}=an;
     const bars=state.data.bars;
     const dpr=window.devicePixelRatio||1;
-    const W=cv.clientWidth,Hh=430;
+    const W=cv.clientWidth,Hh=452;
     if(W<10)return;
     cv.width=W*dpr;cv.height=Hh*dpr;
     const ctx=cv.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0);
     const cs=getComputedStyle(root);
     const C={ink:cs.getPropertyValue("--fink").trim(),ink3:cs.getPropertyValue("--fink3").trim(),
-      gold:cs.getPropertyValue("--fgold").trim(),ext:cs.getPropertyValue("--fext").trim(),
-      line:"rgba(236,222,180,.07)"};
+      gold:cs.getPropertyValue("--fgold").trim(),gink:cs.getPropertyValue("--fgold-ink").trim(),
+      ext:cs.getPropertyValue("--fext").trim(),up:cs.getPropertyValue("--fup-ink").trim(),
+      down:cs.getPropertyValue("--fdown-ink").trim(),line:"rgba(236,222,180,.07)"};
     const MONO=cs.getPropertyValue("--fmono");
-    const padR=64,padB=24,padT=8,padL=8;
+    const padR=66,padB=26,padT=10,padL=8;
     const iw=W-padL-padR,ih=Hh-padT-padB;
-    const start=Math.max(0,Math.min(sw.A.i-8,bars.length-Math.min(an.H.lookback,bars.length)));
+    const last=bars.length-1;
+    /* --- escala temporal: el impulso A→B es el protagonista; un poco de contexto antes de A --- */
+    const impDur=Math.max(sw.B.i-sw.A.i,1);
+    const prefix=Math.max(6,Math.round(impDur*0.18));
+    let start=sw.A.i-prefix;
+    if(last-start<50)start=last-50;      // piso de contexto para impulsos muy recientes
+    start=Math.max(0,start);
     const vis=bars.slice(start);
     let lo=Math.min(...vis.map(b=>b.l)),hi=Math.max(...vis.map(b=>b.h));
     const wish=[sw.A.p,sw.B.p,...RETS.map(r=>levelPrice(sw,r)),extPrice(sw,1.272)];
@@ -857,17 +1022,45 @@ function initFibonacciModule(container,opts={}){
     for(const p of wish){if(p>lo-span0*0.6&&p<hi+span0*0.6){lo=Math.min(lo,p);hi=Math.max(hi,p);}}
     const e161=extPrice(sw,1.618);
     if(e161<hi+(hi-lo)*0.25&&e161>lo-(hi-lo)*0.25){lo=Math.min(lo,e161);hi=Math.max(hi,e161);}
-    const pad=(hi-lo)*0.045;lo-=pad;hi+=pad;
+    const pad=(hi-lo)*0.05;lo-=pad;hi+=pad;
     const X=i=>padL+((i-start)/Math.max(vis.length-1,1))*iw;
     const Y=p=>padT+(1-(p-lo)/(hi-lo))*ih;
     chartGeom={start,X,Y,padL,iw,vis};
+    const xFib0=X(Math.max(sw.A.i,start)),xEnd=W-padR;
+    const yOf=p=>Math.round(Y(p))+.5;
+    const inView=y=>y>=padT&&y<=Hh-padB;
 
     ctx.clearRect(0,0,W,Hh);
+
+    /* --- 1. ZONAS sombreadas con significado (detrás de todo) --- */
+    const bandFill=(pa,pb,color)=>{
+      const y1=Y(pa),y2=Y(pb);
+      ctx.fillStyle=color;
+      ctx.fillRect(xFib0,Math.min(y1,y2),xEnd-xFib0,Math.abs(y2-y1));
+      return [Math.min(y1,y2),Math.max(y1,y2)];
+    };
+    const zoneTag=(txt,yTop,yBot,color)=>{
+      if(yBot-yTop<13)return;
+      ctx.font="9.5px "+MONO;
+      const w=ctx.measureText(txt).width;
+      const yc=(yTop+yBot)/2;
+      ctx.fillStyle="rgba(12,12,10,.5)";ctx.fillRect(xFib0+5,yc-6,w+6,12);
+      ctx.fillStyle=color;ctx.textAlign="left";ctx.textBaseline="middle";
+      ctx.fillText(txt,xFib0+8,yc+.5);
+    };
+    // zona de objetivos (extensiones): de B hasta la ext 161,8%
+    const ez=bandFill(sw.B.p,extPrice(sw,1.618),"rgba(126,163,212,.06)");
+    // zona de retroceso (38,2%–78,6%): donde el precio suele reaccionar
+    const rz=bandFill(levelPrice(sw,0.382),levelPrice(sw,0.786),"rgba(217,168,78,.05)");
+    // golden pocket (61,8–65%): la más observada
+    const gz=bandFill(levelPrice(sw,0.618),levelPrice(sw,0.65),"rgba(217,168,78,.15)");
+
+    /* --- 2. grilla + eje de precios --- */
     ctx.font="10.5px "+MONO;
     ctx.strokeStyle=C.line;ctx.lineWidth=1;
     const steps=5;
     for(let i=0;i<=steps;i++){
-      const p=lo+(hi-lo)*i/steps,y=Math.round(Y(p))+.5;
+      const p=lo+(hi-lo)*i/steps,y=yOf(p);
       ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();
       ctx.fillStyle=C.ink3;ctx.textAlign="left";ctx.textBaseline="middle";
       ctx.fillText(fmtN(p,p>=1000?0:p>=10?1:2),W-padR+8,y);
@@ -879,40 +1072,55 @@ function initFibonacciModule(container,opts={}){
       ctx.fillStyle=C.ink3;
       ctx.fillText(fmtDateS(vis[idx].t),clamp(X(start+idx),padL+22,W-padR-22),Hh-padB+7);
     }
-    const xFib0=X(Math.max(sw.A.i,start)),xEnd=W-padR;
-    const gpTop=Y(levelPrice(sw,0.618)),gpBot=Y(levelPrice(sw,0.65));
-    ctx.fillStyle="rgba(217,168,78,.10)";
-    ctx.fillRect(xFib0,Math.min(gpTop,gpBot),xEnd-xFib0,Math.abs(gpBot-gpTop));
-    const lvlLabel=(txt,y,color)=>{
+
+    /* --- 3. líneas de nivel con etiqueta clara (fondo legible) --- */
+    const levLabel=(txt,y,color,strong)=>{
+      ctx.font=(strong?"600 ":"")+"9.5px "+MONO;
+      const w=ctx.measureText(txt).width;
+      ctx.fillStyle="rgba(12,12,10,.6)";
+      ctx.fillRect(xEnd-w-7,y-13,w+6,12);
       ctx.fillStyle=color;ctx.textAlign="right";ctx.textBaseline="bottom";
       ctx.fillText(txt,xEnd-4,y-2);
     };
+    const price=an.price;
     for(const r of RETS){
-      const p=levelPrice(sw,r),y=Math.round(Y(p))+.5;
-      if(y<padT||y>Hh-padB)continue;
-      ctx.strokeStyle="rgba(217,168,78,"+(r===0.618?".7":".38")+")";
-      ctx.lineWidth=r===0.618?1.4:1;
+      const p=levelPrice(sw,r),y=yOf(p);if(!inView(y))continue;
+      const gold=r===0.618;
+      ctx.strokeStyle="rgba(217,168,78,"+(gold?".75":".34")+")";
+      ctx.lineWidth=gold?1.5:1;
       ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();
-      lvlLabel(fmtN(r*100,1)+"%",y,"rgba(232,196,124,.85)");
+      const role=(sw.up?price>=p:price<=p)?"soporte":"resistencia";
+      const txt=fmtN(r*100,1)+"%"+(gold?" · "+role+" clave":r===0.5?" · "+role:"");
+      levLabel(txt,y,gold?C.gink:"rgba(232,196,124,.8)",gold);
     }
-    for(const [pt,lab] of [[sw.A,"origen"],[sw.B,sw.up?"máximo":"mínimo"]]){
-      const y=Math.round(Y(pt.p))+.5;
-      if(y<padT||y>Hh-padB)continue;
-      ctx.strokeStyle="rgba(236,234,217,.4)";ctx.lineWidth=1;
+    // extremos del impulso: B (0%) y A (100% = invalidación)
+    {const y=yOf(sw.B.p);if(inView(y)){
+      ctx.strokeStyle="rgba(236,234,217,.45)";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();
-      lvlLabel(lab+" "+fmtN(pt.p),y,"rgba(236,234,217,.65)");
-    }
+      levLabel("0% · "+(sw.up?"máximo":"mínimo"),y,"rgba(236,234,217,.75)",true);}}
+    {const y=yOf(sw.A.p);if(inView(y)){
+      ctx.strokeStyle="rgba(217,92,92,.5)";ctx.lineWidth=1;ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();ctx.setLineDash([]);
+      levLabel("100% · invalidación",y,C.down,true);}}
+    // extensiones = objetivos
     ctx.setLineDash([5,4]);
+    const extName={1.272:"objetivo 127%",1.618:"objetivo 162% (φ)",2:"objetivo 200%"};
     for(const e of EXTS){
-      const p=extPrice(sw,e),y=Math.round(Y(p))+.5;
-      if(y<padT||y>Hh-padB)continue;
+      const p=extPrice(sw,e),y=yOf(p);if(!inView(y))continue;
       ctx.strokeStyle="rgba(126,163,212,.5)";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();
-      lvlLabel("ext "+fmtN(e*100,1)+"%",y,"rgba(126,163,212,.85)");
+      levLabel(extName[e],y,"rgba(126,163,212,.9)",e===1.618);
     }
     ctx.setLineDash([]);
+
+    /* --- etiquetas de zona (sobre las bandas) --- */
+    zoneTag("zona de objetivos",ez[0],ez[1],"rgba(126,163,212,.8)");
+    zoneTag("zona de retroceso",rz[0],gz[0],"rgba(232,196,124,.75)");
+    zoneTag("golden pocket ✦",gz[0],gz[1],C.gink);
+
+    /* --- 4. SMA200 (tendencia de fondo) --- */
     const closes=bars.map(b=>b.c);
-    ctx.setLineDash([2,4]);ctx.strokeStyle="rgba(168,165,149,.55)";ctx.lineWidth=1.2;
+    ctx.setLineDash([2,4]);ctx.strokeStyle="rgba(168,165,149,.5)";ctx.lineWidth=1.2;
     ctx.beginPath();let started=false;
     for(let i=start;i<bars.length;i++){
       const v=sma(closes,200,i);if(v==null)continue;
@@ -920,31 +1128,60 @@ function initFibonacciModule(container,opts={}){
       if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
     }
     ctx.stroke();ctx.setLineDash([]);
+
+    /* --- 5. precio (área + línea) --- */
     const grd=ctx.createLinearGradient(0,padT,0,Hh-padB);
     grd.addColorStop(0,"rgba(236,234,217,.10)");grd.addColorStop(1,"rgba(236,234,217,0)");
     ctx.beginPath();
     vis.forEach((b,i)=>{const x=X(start+i),y=Y(b.c);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
-    ctx.lineTo(X(bars.length-1),Hh-padB);ctx.lineTo(X(start),Hh-padB);ctx.closePath();
+    ctx.lineTo(X(last),Hh-padB);ctx.lineTo(X(start),Hh-padB);ctx.closePath();
     ctx.fillStyle=grd;ctx.fill();
     ctx.beginPath();
     vis.forEach((b,i)=>{const x=X(start+i),y=Y(b.c);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
     ctx.strokeStyle=C.ink;ctx.lineWidth=1.6;ctx.lineJoin="round";ctx.stroke();
+
+    /* --- 6. flecha del IMPULSO A→B (el movimiento que Fibonacci mide) --- */
+    const ax=X(sw.A.i),ay=Y(sw.A.p),bx=X(sw.B.i),by=Y(sw.B.p);
+    const dirCol=sw.up?"63,179,116":"217,92,92";
+    ctx.strokeStyle="rgba("+dirCol+",.55)";ctx.lineWidth=2;ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();
+    const ang=Math.atan2(by-ay,bx-ax),ah=8;
+    ctx.beginPath();ctx.moveTo(bx,by);
+    ctx.lineTo(bx-ah*Math.cos(ang-0.42),by-ah*Math.sin(ang-0.42));
+    ctx.lineTo(bx-ah*Math.cos(ang+0.42),by-ah*Math.sin(ang+0.42));
+    ctx.closePath();ctx.fillStyle="rgba("+dirCol+",.8)";ctx.fill();
+    {const mtxt="impulso "+fmtPct((sw.B.p/sw.A.p-1)*100,0);
+     // etiqueta cerca de A (tramo bajo del impulso, zona despejada), desplazada del trazo
+     const t=0.3,mx=ax+t*(bx-ax),my=ay+t*(by-ay);
+     ctx.font="600 10px "+MONO;const mw=ctx.measureText(mtxt).width;
+     const lx=clamp(mx-mw/2-4,padL,xEnd-mw-8),ly=my+(sw.up?10:-24);
+     ctx.fillStyle="rgba(12,12,10,.66)";ctx.fillRect(lx,ly,mw+8,14);
+     ctx.fillStyle=sw.up?C.up:C.down;ctx.textAlign="left";ctx.textBaseline="middle";
+     ctx.fillText(mtxt,lx+4,ly+8);}
+
+    /* --- 7. pivotes A y B con nombre --- */
     for(const [pt,isB] of [[sw.A,false],[sw.B,true]]){
       const x=X(pt.i),y=Y(pt.p);
-      ctx.beginPath();ctx.arc(x,y,4,0,7);
+      ctx.beginPath();ctx.arc(x,y,4.5,0,7);
       ctx.fillStyle=C.gold;ctx.fill();
       ctx.lineWidth=2;ctx.strokeStyle="#0c0c0a";ctx.stroke();
-      ctx.fillStyle="rgba(232,196,124,.9)";ctx.textAlign="center";ctx.textBaseline=isB===sw.up?"bottom":"top";
-      ctx.fillText(isB?"B":"A",x,y+(isB===sw.up?-8:8));
+      const lab=isB?"B · fin":"A · inicio";
+      ctx.font="600 9.5px "+MONO;const lw=ctx.measureText(lab).width;
+      const lx=clamp(x-lw/2-3,padL,W-padR-lw-6);
+      const ly=isB===sw.up?y-22:y+8;
+      ctx.fillStyle="rgba(12,12,10,.6)";ctx.fillRect(lx,ly,lw+6,13);
+      ctx.fillStyle=C.gink;ctx.textAlign="left";ctx.textBaseline="top";
+      ctx.fillText(lab,lx+3,ly+2);
     }
-    const py=Math.round(Y(an.price))+.5;
-    ctx.strokeStyle="rgba(236,234,217,.35)";ctx.setLineDash([1,3]);
+
+    /* --- 8. precio actual (dónde estás ahora) --- */
+    const py=yOf(an.price);
+    ctx.strokeStyle="rgba(236,234,217,.4)";ctx.setLineDash([1,3]);
     ctx.beginPath();ctx.moveTo(padL,py);ctx.lineTo(W-padR,py);ctx.stroke();ctx.setLineDash([]);
     const ptxt=fmtN(an.price);
     ctx.font="600 10.5px "+MONO;
     const tw=ctx.measureText(ptxt).width+12;
-    ctx.fillStyle="#26241c";
-    ctx.strokeStyle="rgba(217,168,78,.5)";ctx.lineWidth=1;
+    ctx.fillStyle="#26241c";ctx.strokeStyle="rgba(217,168,78,.55)";ctx.lineWidth=1;
     const rx=W-padR+2,ry=py-9,rw=Math.max(tw,padR-6),rh=18,rr2=4;
     ctx.beginPath();
     ctx.moveTo(rx+rr2,ry);ctx.arcTo(rx+rw,ry,rx+rw,ry+rh,rr2);ctx.arcTo(rx+rw,ry+rh,rx,ry+rh,rr2);
@@ -952,6 +1189,12 @@ function initFibonacciModule(container,opts={}){
     ctx.fill();ctx.stroke();
     ctx.fillStyle=C.gold;ctx.textAlign="left";ctx.textBaseline="middle";
     ctx.fillText(ptxt,W-padR+8,py+0.5);
+    // etiqueta "acá estás" al borde izquierdo de la línea de precio
+    ctx.font="600 9px "+MONO;const nowT="◂ precio hoy";
+    ctx.fillStyle="rgba(12,12,10,.55)";ctx.fillRect(padL+2,py-6,ctx.measureText(nowT).width+6,12);
+    ctx.fillStyle=C.gink;ctx.textAlign="left";ctx.textBaseline="middle";
+    ctx.fillText(nowT,padL+5,py+.5);
+
     bindTooltip(cv);
   }
   function bindTooltip(cv){
