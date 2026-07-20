@@ -228,23 +228,41 @@ const PROXIES=[
   u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
   u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u),
 ];
-async function fetchJSON(url,ms=12000){
+async function fetchRaw(url,as,ms=9000){
   const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),ms);
   try{
     const r=await fetch(url,{signal:ctl.signal});
     if(!r.ok)throw new Error("HTTP "+r.status);
-    return await r.json();
+    return as==="json"?await r.json():await r.text();
   }finally{clearTimeout(t);}
+}
+function parseStooqCSV(txt){
+  const lines=String(txt).trim().split(/\r?\n/);
+  const bars=[];
+  for(let i=1;i<lines.length;i++){
+    const p=lines[i].split(",");
+    if(p.length<5)continue;
+    const t=Date.parse(p[0]);const c=parseFloat(p[4]);
+    if(!isFinite(t)||!isFinite(c)||c<=0)continue;
+    bars.push({t,o:parseFloat(p[1])||c,h:parseFloat(p[2])||c,l:parseFloat(p[3])||c,c,v:parseFloat(p[5])||0});
+  }
+  return bars;
 }
 async function fetchHistory(sym,onStep){
   /* 10 años es el máximo con granularidad diaria confiable en Yahoo; con range=max
-     los históricos muy largos vuelven en velas mensuales y el análisis pierde sentido */
-  const base=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%2Csplit`;
+     los históricos muy largos vuelven en velas mensuales y el análisis pierde sentido.
+     Cadena de resiliencia: query1 y query2 directos → proxies CORS → respaldo Stooq. */
   let lastErr=null;
-  for(let i=0;i<PROXIES.length;i++){
-    onStep(i===0?"Conectando con Yahoo Finance…":`Reintentando vía proxy alternativo (${i}/${PROXIES.length-1})…`);
+  const yUrl=h=>`https://${h}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%2Csplit`;
+  const attempts=[
+    [yUrl("query1"),0],[yUrl("query2"),0],
+    [yUrl("query1"),1],[yUrl("query1"),2],[yUrl("query1"),3],
+    [yUrl("query2"),2],
+  ];
+  for(let k=0;k<attempts.length;k++){
+    onStep(k===0?"Conectando con Yahoo Finance…":`Reintentando por ruta alternativa (${k}/${attempts.length-1})…`);
     try{
-      const j=await fetchJSON(PROXIES[i](base));
+      const j=await fetchRaw(PROXIES[attempts[k][1]](attempts[k][0]),"json");
       const res=j?.chart?.result?.[0];
       if(!res){
         const code=j?.chart?.error?.code||"";
@@ -255,7 +273,21 @@ async function fetchHistory(sym,onStep){
       return parseYahoo(res);
     }catch(e){if(e.notFound)throw e;lastErr=e;}
   }
-  throw new Error("No se pudo descargar el histórico ("+(lastErr?.message||"sin conexión")+").");
+  if(!sym.includes(".")){
+    const sUrl=`https://stooq.com/q/d/l/?s=${sym.toLowerCase()}.us&i=d`;
+    for(const px of [1,2,3]){
+      onStep("Yahoo no responde; probando fuente de respaldo (Stooq)…");
+      try{
+        const txt=await fetchRaw(PROXIES[px](sUrl),"text");
+        const cut=Date.now()-3653*864e5;
+        const bars=parseStooqCSV(txt).filter(b=>b.t>=cut);
+        if(bars.length>=120)
+          return {bars,meta:{symbol:sym,name:"",currency:"USD",exchange:"Stooq · fuente de respaldo"}};
+        throw new Error("CSV insuficiente");
+      }catch(e){lastErr=e;}
+    }
+  }
+  throw new Error("No se pudieron traer los precios ("+(lastErr?.message||"sin conexión")+"). Los proxies públicos fallan a veces — suele resolverse reintentando en unos segundos.");
 }
 function parseYahoo(res){
   const q=res.indicators?.quote?.[0]||{};
