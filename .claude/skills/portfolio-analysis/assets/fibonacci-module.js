@@ -248,46 +248,81 @@ function parseStooqCSV(txt){
   }
   return bars;
 }
+function isSandboxed(){
+  try{
+    if(!/^(https?|file):/.test(location.protocol))return true;
+    return window.self!==window.top;
+  }catch(_){return true;}
+}
+/* carrera de rutas: dispara todas en paralelo y gana la primera respuesta VÁLIDA */
+function raceYahoo(urls,ms){
+  return new Promise((resolve,reject)=>{
+    let pending=urls.length,lastErr=null,done=false;
+    urls.forEach(async u=>{
+      try{
+        const j=await fetchRaw(u,"json",ms);
+        const res=j?.chart?.result?.[0];
+        if(!res){
+          const code=j?.chart?.error?.code||"";
+          if(/not found/i.test(code)||/no data/i.test(j?.chart?.error?.description||""))
+            throw Object.assign(new Error("NOTFOUND"),{notFound:true});
+          throw new Error(code||"respuesta vacía");
+        }
+        if(!done){done=true;resolve(parseYahoo(res));}
+      }catch(e){
+        if(e.notFound&&!done){done=true;reject(e);return;}
+        lastErr=e;
+        if(--pending===0&&!done){done=true;reject(lastErr||new Error("sin rutas"));}
+      }
+    });
+  });
+}
+function raceText(urls,validate,ms){
+  return new Promise((resolve,reject)=>{
+    let pending=urls.length,lastErr=null,done=false;
+    urls.forEach(async u=>{
+      try{
+        const t=await fetchRaw(u,"text",ms);
+        if(!validate(t))throw new Error("respuesta inválida");
+        if(!done){done=true;resolve(t);}
+      }catch(e){
+        lastErr=e;
+        if(--pending===0&&!done){done=true;reject(lastErr||new Error("sin rutas"));}
+      }
+    });
+  });
+}
 async function fetchHistory(sym,onStep){
   /* 10 años es el máximo con granularidad diaria confiable en Yahoo; con range=max
      los históricos muy largos vuelven en velas mensuales y el análisis pierde sentido.
-     Cadena de resiliencia: query1 y query2 directos → proxies CORS → respaldo Stooq. */
+     Cadena de resiliencia (cada etapa corre sus rutas EN PARALELO):
+     1) Yahoo query1+query2 directos → 2) Yahoo vía proxies CORS → 3) respaldo Stooq. */
   let lastErr=null;
   const yUrl=h=>`https://${h}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%2Csplit`;
-  const attempts=[
-    [yUrl("query1"),0],[yUrl("query2"),0],
-    [yUrl("query1"),1],[yUrl("query1"),2],[yUrl("query1"),3],
-    [yUrl("query2"),2],
-  ];
-  for(let k=0;k<attempts.length;k++){
-    onStep(k===0?"Conectando con Yahoo Finance…":`Reintentando por ruta alternativa (${k}/${attempts.length-1})…`);
-    try{
-      const j=await fetchRaw(PROXIES[attempts[k][1]](attempts[k][0]),"json");
-      const res=j?.chart?.result?.[0];
-      if(!res){
-        const code=j?.chart?.error?.code||"";
-        if(/not found/i.test(code)||/no data/i.test(j?.chart?.error?.description||""))
-          throw Object.assign(new Error("NOTFOUND"),{notFound:true});
-        throw new Error(code||"respuesta vacía");
-      }
-      return parseYahoo(res);
-    }catch(e){if(e.notFound)throw e;lastErr=e;}
-  }
+  onStep("Conectando con Yahoo Finance…");
+  try{return await raceYahoo([yUrl("query1"),yUrl("query2")],4500);}
+  catch(e){if(e.notFound)throw e;lastErr=e;}
+  onStep("Sin respuesta directa; probando proxies en paralelo…");
+  try{return await raceYahoo([
+    PROXIES[1](yUrl("query1")),PROXIES[2](yUrl("query1")),PROXIES[3](yUrl("query1")),PROXIES[2](yUrl("query2")),
+  ],9000);}
+  catch(e){if(e.notFound)throw e;lastErr=e;}
   if(!sym.includes(".")){
+    onStep("Yahoo no responde; probando fuente de respaldo (Stooq)…");
     const sUrl=`https://stooq.com/q/d/l/?s=${sym.toLowerCase()}.us&i=d`;
-    for(const px of [1,2,3]){
-      onStep("Yahoo no responde; probando fuente de respaldo (Stooq)…");
-      try{
-        const txt=await fetchRaw(PROXIES[px](sUrl),"text");
-        const cut=Date.now()-3653*864e5;
-        const bars=parseStooqCSV(txt).filter(b=>b.t>=cut);
-        if(bars.length>=120)
-          return {bars,meta:{symbol:sym,name:"",currency:"USD",exchange:"Stooq · fuente de respaldo"}};
-        throw new Error("CSV insuficiente");
-      }catch(e){lastErr=e;}
-    }
+    try{
+      const txt=await raceText([PROXIES[1](sUrl),PROXIES[2](sUrl),PROXIES[3](sUrl)],
+        t=>/^Date,/m.test(String(t).slice(0,300)),9000);
+      const cut=Date.now()-3653*864e5;
+      const bars=parseStooqCSV(txt).filter(b=>b.t>=cut);
+      if(bars.length>=120)
+        return {bars,meta:{symbol:sym,name:"",currency:"USD",exchange:"Stooq · fuente de respaldo"}};
+      lastErr=new Error("CSV insuficiente");
+    }catch(e){lastErr=e;}
   }
-  throw new Error("No se pudieron traer los precios ("+(lastErr?.message||"sin conexión")+"). Los proxies públicos fallan a veces — suele resolverse reintentando en unos segundos.");
+  throw new Error("No se pudieron traer los precios ("+(lastErr?.message||"sin conexión")+")."+(isSandboxed()
+    ?" ATENCIÓN: este reporte está corriendo dentro de una vista previa embebida que bloquea las conexiones externas — descargá el archivo HTML y abrilo directamente en tu navegador (doble click)."
+    :" Los proxies públicos fallan a veces — suele resolverse reintentando en unos segundos."));
 }
 function parseYahoo(res){
   const q=res.indicators?.quote?.[0]||{};
