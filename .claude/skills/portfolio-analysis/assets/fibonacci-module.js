@@ -237,7 +237,9 @@ async function fetchJSON(url,ms=12000){
   }finally{clearTimeout(t);}
 }
 async function fetchHistory(sym,onStep){
-  const base=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=max&interval=1d&events=div%2Csplit`;
+  /* 10 años es el máximo con granularidad diaria confiable en Yahoo; con range=max
+     los históricos muy largos vuelven en velas mensuales y el análisis pierde sentido */
+  const base=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%2Csplit`;
   let lastErr=null;
   for(let i=0;i<PROXIES.length;i++){
     onStep(i===0?"Conectando con Yahoo Finance…":`Reintentando vía proxy alternativo (${i}/${PROXIES.length-1})…`);
@@ -286,11 +288,21 @@ function demoData(){
 }
 
 /* ---------------- motor de análisis ---------------- */
+/* Ventanas definidas por FECHA (días calendario), no por cantidad de velas:
+   así una serie con huecos o granularidad inesperada no distorsiona el grado del swing.
+   Regla: la ventana de análisis ≈ 2-4× el horizonte de decisión. */
 const HORIZONS={
-  corto:{label:"Corto",lookback:190,base:5,desc:"~9 meses de vista, swings de grado menor"},
-  medio:{label:"Medio",lookback:520,base:9,desc:"~2 años de vista, swings intermedios"},
-  largo:{label:"Largo",lookback:2000,base:15,desc:"~8 años de vista, swings mayores"},
+  corto:{label:"Corto",days:270,base:5,desc:"~9 meses de vista · para decisiones de semanas a 6 meses"},
+  medio:{label:"Medio",days:730,base:9,desc:"~2 años de vista · swings intermedios"},
+  largo:{label:"Largo",days:1825,base:15,desc:"~5 años de vista · estructura mayor (contexto)"},
 };
+function medianSpacingDays(bars){
+  if(bars.length<30)return 1;
+  const gaps=[];
+  for(let i=1;i<Math.min(bars.length,400);i++)gaps.push(bars[i].t-bars[i-1].t);
+  gaps.sort((a,b)=>a-b);
+  return gaps[Math.floor(gaps.length/2)]/864e5;
+}
 const RETS=[0.236,0.382,0.5,0.618,0.786];
 const EXTS=[1.272,1.618,2.0];
 const PRIOR_W=6;
@@ -431,8 +443,15 @@ function analyze(bars,horizonKey){
   const H=HORIZONS[horizonKey];
   const closes=bars.map(b=>b.c);
   const last=bars.length-1,price=closes[last];
-  const wLen=Math.min(H.lookback,bars.length-1);
-  const wStart=bars.length-wLen;
+  const lastT=bars[last].t;
+  /* inicio de ventana por FECHA: primer índice dentro de los últimos H.days días */
+  const winStart=days=>{
+    const cut=lastT-days*864e5;
+    let i=bars.findIndex(b=>b.t>=cut);
+    if(i<0)i=0;
+    return Math.max(0,Math.min(i,last-40));
+  };
+  const wStart=winStart(H.days);
   const volD=stdev(rets(closes.slice(wStart)));
   const thr=clamp(Math.max(H.base,volD*100*5.5),H.base,30);
   const piv=zigzag(bars,thr);
@@ -450,8 +469,7 @@ function analyze(bars,horizonKey){
   const upKey=horizonKey==="corto"?"medio":horizonKey==="medio"?"largo":null;
   let confl=[];
   if(upKey){
-    const uw=Math.min(HORIZONS[upKey].lookback,bars.length-1);
-    const sw2=pickSwing(bars,bars.length-uw);
+    const sw2=pickSwing(bars,winStart(HORIZONS[upKey].days));
     if(sw2&&sw2.up===sw.up){
       for(const r of RETS)confl.push(levelPrice(sw2,r));
       confl.push(sw2.A.p,sw2.B.p);
@@ -565,7 +583,7 @@ function initFibonacciModule(container,opts={}){
     <div class="f-body"></div>`;
   container.appendChild(root);
   const body=root.querySelector(".f-body");
-  const state={data:null,horizon:opts.horizon||"medio",an:null,sym:null};
+  const state={data:null,horizon:opts.horizon||"corto",an:null,sym:null};
   let chartGeom=null;
 
   root.querySelectorAll(".f-picker [data-sym]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.sym)));
@@ -592,6 +610,9 @@ function initFibonacciModule(container,opts={}){
       const data=sym==="DEMO"?demoData():await fetchHistory(sym,onStep);
       if(!data.bars||data.bars.length<120)
         throw new Error("Histórico insuficiente ("+(data.bars?.length||0)+" sesiones).");
+      const spc=medianSpacingDays(data.bars);
+      if(spc>2.6)
+        throw new Error("La fuente devolvió velas de ~"+Math.round(spc)+" días en lugar de diarias; el análisis perdería sentido. Reintentá en unos segundos.");
       onStep("Detectando swings y calculando probabilidades…");
       state.data=data;
       state.an=analyze(data.bars,state.horizon);
@@ -796,7 +817,7 @@ function initFibonacciModule(container,opts={}){
         <div class="kv">
           <div class="r"><span>Nivel de invalidación</span><b class="${sw.up?"down":"up"}">${fmtN(sw.A.p)}</b></div>
           <div class="r"><span>Distancia desde el precio</span><b>${fmtPct((sw.A.p/price-1)*100,1)}</b></div>
-          <div class="r"><span>Referencia posterior</span><b class="${sw.up?"down":"up"}">${fmtN(sw.up?sw.A.p-0.272*sw.range:sw.A.p+0.272*sw.range)}</b></div>
+          <div class="r"><span>Referencia posterior</span><b class="${sw.up?"down":"up"}">${(()=>{const ref=sw.up?sw.A.p-0.272*sw.range:sw.A.p+0.272*sw.range;return ref>0?fmtN(ref):"—";})()}</b></div>
         </div>
       </section>
 
@@ -808,7 +829,7 @@ function initFibonacciModule(container,opts={}){
 
       <section class="f-card f-dist">
         <h5>¿Dónde terminan los ${sw.up?"retrocesos":"rebotes"} de ${esc(meta.symbol)}?
-          <span class="n">n=${dCases.length} swings ${sw.up?"alcistas":"bajistas"} en todo el histórico</span></h5>
+          <span class="n">n=${dCases.length} swings ${sw.up?"alcistas":"bajistas"} en los últimos 10 años</span></h5>
         ${distBins.map(([lb,a,b],i)=>{
           const n=dCases.filter(c=>c.depth>=a&&c.depth<b).length;
           const pct=dCases.length?n/dCases.length*100:0;
@@ -836,7 +857,7 @@ function initFibonacciModule(container,opts={}){
       <p class="f-method">
         <b>Método.</b> El impulso vigente se define por el extremo dominante de la ventana del horizonte y su origen.
         Sobre él se proyectan retrocesos (23,6 · 38,2 · 50 · 61,8 · 78,6%) y extensiones (127,2 · 161,8 · 200%).
-        Las probabilidades se estiman contando, en todo el histórico del papel, qué hizo el precio en situaciones
+        Las probabilidades se estiman contando, en los últimos 10 años del papel (velas diarias), qué hizo el precio en situaciones
         comparables, con corrección bayesiana suave para muestras chicas. Datos técnicos en vivo al momento de abrir
         el reporte — pueden diferir del snapshot del análisis fundamental. No constituye asesoramiento financiero.
       </p>

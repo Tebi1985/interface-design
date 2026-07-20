@@ -12,8 +12,10 @@ conexión** con una serie sintética.
 
 ## Qué hace
 
-1. **Descarga todo el histórico** diario del ticker desde Yahoo Finance
-   (con proxies CORS de respaldo si el acceso directo falla).
+1. **Descarga 10 años de histórico diario** del ticker desde Yahoo Finance
+   (con proxies CORS de respaldo si el acceso directo falla). Se limita a 10
+   años porque es el máximo con granularidad diaria confiable — y porque los
+   niveles técnicos pierden sentido más allá de la memoria del mercado.
 2. **Detecta el impulso vigente** según el horizonte elegido (corto / medio /
    largo) y traza retrocesos (23,6 · 38,2 · 50 · 61,8 · 78,6%) y extensiones
    (127,2 · 161,8 · 200%), con detección de *golden pocket* y confluencias con
