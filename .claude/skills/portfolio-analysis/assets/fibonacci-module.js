@@ -116,6 +116,15 @@ const CSS=`
 .fibm .lg i{width:14px;height:0;border-top:2px solid;display:block;border-radius:1px}
 .fibm .lg i.dash{border-top-style:dashed}
 .fibm .lg i.band{height:8px;border:none;border-radius:2px}
+.fibm .f-help{margin:0 0 12px;border:1px solid var(--fline);border-radius:8px;background:var(--finset);overflow:hidden}
+.fibm .f-help summary{cursor:pointer;padding:8px 12px;font-size:12px;font-weight:600;color:var(--fgold-ink);list-style:none;display:flex;align-items:center;gap:8px}
+.fibm .f-help summary::-webkit-details-marker{display:none}
+.fibm .f-help summary::before{content:"?";display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--fgold-line);background:var(--fgold-soft);font:600 10px var(--fmono);flex:0 0 auto}
+.fibm .f-help summary span{font-weight:400;color:var(--fink3);font-size:11px}
+.fibm .f-help[open] summary{border-bottom:1px solid var(--fline)}
+.fibm .f-help ol{margin:0;padding:10px 14px 12px 30px;display:grid;gap:6px}
+.fibm .f-help li{font-size:12px;color:var(--fink2);line-height:1.5}
+.fibm .f-help li b{color:var(--fink);font-weight:600}
 .fibm .chart-wrap{position:relative}
 .fibm .f-canvas{width:100%;display:block;border-radius:5px}
 .fibm .f-tip{position:absolute;pointer-events:none;background:var(--fpanel2);border:1px solid var(--fline-strong);
@@ -740,13 +749,24 @@ function initFibonacciModule(container,opts={}){
           <span class="n">${fmtN(sw.A.p)} → ${fmtN(sw.B.p)} · ${fmtDateS(sw.A.t)} – ${fmtDateS(sw.B.t)} · umbral zigzag ${fmtN(an.thr,1)}%</span></h5>
         <div class="f-legend">
           <span class="lg"><i style="border-color:var(--fink)"></i>Precio</span>
-          <span class="lg"><i class="dash" style="border-color:var(--fink3)"></i>SMA200</span>
-          <span class="lg"><i style="border-color:var(--fgold)"></i>Retrocesos</span>
-          <span class="lg"><i class="dash" style="border-color:var(--fext)"></i>Extensiones</span>
-          <span class="lg"><i class="band" style="background:var(--fgold-soft);border:1px solid var(--fgold-line)"></i>Golden pocket 61,8–65%</span>
+          <span class="lg"><i style="border-color:${sw.up?"var(--fup)":"var(--fdown)"}"></i>Impulso A→B</span>
+          <span class="lg"><i class="dash" style="border-color:var(--fink3)"></i>SMA200 (tendencia)</span>
+          <span class="lg"><i style="border-color:var(--fgold)"></i>Retrocesos (soportes)</span>
+          <span class="lg"><i class="dash" style="border-color:var(--fext)"></i>Extensiones (objetivos)</span>
+          <span class="lg"><i class="band" style="background:var(--fgold-soft);border:1px solid var(--fgold-line)"></i>Golden pocket</span>
         </div>
+        <details class="f-help">
+          <summary>¿Cómo leer este gráfico? <span>guía rápida para principiantes</span></summary>
+          <ol>
+            <li><b>La flecha ${sw.up?"verde":"roja"} es el impulso:</b> el último movimiento fuerte del precio (de <b>A</b> a <b>B</b>). Todo Fibonacci se mide sobre ese tramo.</li>
+            <li><b>Tras el impulso el precio retrocede</b> y suele frenarse en las <b>líneas doradas</b> (posibles ${sw.up?"soportes donde rebotar":"resistencias donde caer"}). La banda <b>golden pocket (61,8–65%)</b> es la más observada del mercado.</li>
+            <li><b>Si retoma la dirección del impulso</b>, las <b>líneas azules punteadas</b> son los objetivos (extensiones 127% · 162% · 200%).</li>
+            <li><b>La línea 100% es la invalidación:</b> si el precio la cruza, el conteo deja de valer y la lectura cambia.</li>
+            <li>La <b>escalera de la derecha</b> lista cada nivel con su precio y la <b>probabilidad histórica</b> de que el precio lo toque, calculada con el propio comportamiento de este papel.</li>
+          </ol>
+        </details>
         <div class="chart-wrap">
-          <canvas class="f-canvas" height="430" aria-label="Gráfico de precios con niveles de Fibonacci"></canvas>
+          <canvas class="f-canvas" height="452" aria-label="Gráfico de precios con niveles de Fibonacci"></canvas>
           <div class="f-tip"></div>
         </div>
       </section>
@@ -837,19 +857,26 @@ function initFibonacciModule(container,opts={}){
     const an=state.an,{sw}=an;
     const bars=state.data.bars;
     const dpr=window.devicePixelRatio||1;
-    const W=cv.clientWidth,Hh=430;
+    const W=cv.clientWidth,Hh=452;
     if(W<10)return;
     cv.width=W*dpr;cv.height=Hh*dpr;
     const ctx=cv.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0);
     const cs=getComputedStyle(root);
     const C={ink:cs.getPropertyValue("--fink").trim(),ink3:cs.getPropertyValue("--fink3").trim(),
-      gold:cs.getPropertyValue("--fgold").trim(),ext:cs.getPropertyValue("--fext").trim(),
-      line:"rgba(236,222,180,.07)"};
+      gold:cs.getPropertyValue("--fgold").trim(),gink:cs.getPropertyValue("--fgold-ink").trim(),
+      ext:cs.getPropertyValue("--fext").trim(),up:cs.getPropertyValue("--fup-ink").trim(),
+      down:cs.getPropertyValue("--fdown-ink").trim(),line:"rgba(236,222,180,.07)"};
     const MONO=cs.getPropertyValue("--fmono");
-    const padR=64,padB=24,padT=8,padL=8;
+    const padR=66,padB=26,padT=10,padL=8;
     const iw=W-padL-padR,ih=Hh-padT-padB;
-    const start=Math.max(0,Math.min(sw.A.i-8,bars.length-Math.min(an.H.lookback,bars.length)));
+    const last=bars.length-1;
+    /* --- escala temporal: el impulso A→B es el protagonista; un poco de contexto antes de A --- */
+    const impDur=Math.max(sw.B.i-sw.A.i,1);
+    const prefix=Math.max(6,Math.round(impDur*0.18));
+    let start=sw.A.i-prefix;
+    if(last-start<50)start=last-50;      // piso de contexto para impulsos muy recientes
+    start=Math.max(0,start);
     const vis=bars.slice(start);
     let lo=Math.min(...vis.map(b=>b.l)),hi=Math.max(...vis.map(b=>b.h));
     const wish=[sw.A.p,sw.B.p,...RETS.map(r=>levelPrice(sw,r)),extPrice(sw,1.272)];
@@ -857,17 +884,45 @@ function initFibonacciModule(container,opts={}){
     for(const p of wish){if(p>lo-span0*0.6&&p<hi+span0*0.6){lo=Math.min(lo,p);hi=Math.max(hi,p);}}
     const e161=extPrice(sw,1.618);
     if(e161<hi+(hi-lo)*0.25&&e161>lo-(hi-lo)*0.25){lo=Math.min(lo,e161);hi=Math.max(hi,e161);}
-    const pad=(hi-lo)*0.045;lo-=pad;hi+=pad;
+    const pad=(hi-lo)*0.05;lo-=pad;hi+=pad;
     const X=i=>padL+((i-start)/Math.max(vis.length-1,1))*iw;
     const Y=p=>padT+(1-(p-lo)/(hi-lo))*ih;
     chartGeom={start,X,Y,padL,iw,vis};
+    const xFib0=X(Math.max(sw.A.i,start)),xEnd=W-padR;
+    const yOf=p=>Math.round(Y(p))+.5;
+    const inView=y=>y>=padT&&y<=Hh-padB;
 
     ctx.clearRect(0,0,W,Hh);
+
+    /* --- 1. ZONAS sombreadas con significado (detrás de todo) --- */
+    const bandFill=(pa,pb,color)=>{
+      const y1=Y(pa),y2=Y(pb);
+      ctx.fillStyle=color;
+      ctx.fillRect(xFib0,Math.min(y1,y2),xEnd-xFib0,Math.abs(y2-y1));
+      return [Math.min(y1,y2),Math.max(y1,y2)];
+    };
+    const zoneTag=(txt,yTop,yBot,color)=>{
+      if(yBot-yTop<13)return;
+      ctx.font="9.5px "+MONO;
+      const w=ctx.measureText(txt).width;
+      const yc=(yTop+yBot)/2;
+      ctx.fillStyle="rgba(12,12,10,.5)";ctx.fillRect(xFib0+5,yc-6,w+6,12);
+      ctx.fillStyle=color;ctx.textAlign="left";ctx.textBaseline="middle";
+      ctx.fillText(txt,xFib0+8,yc+.5);
+    };
+    // zona de objetivos (extensiones): de B hasta la ext 161,8%
+    const ez=bandFill(sw.B.p,extPrice(sw,1.618),"rgba(126,163,212,.06)");
+    // zona de retroceso (38,2%–78,6%): donde el precio suele reaccionar
+    const rz=bandFill(levelPrice(sw,0.382),levelPrice(sw,0.786),"rgba(217,168,78,.05)");
+    // golden pocket (61,8–65%): la más observada
+    const gz=bandFill(levelPrice(sw,0.618),levelPrice(sw,0.65),"rgba(217,168,78,.15)");
+
+    /* --- 2. grilla + eje de precios --- */
     ctx.font="10.5px "+MONO;
     ctx.strokeStyle=C.line;ctx.lineWidth=1;
     const steps=5;
     for(let i=0;i<=steps;i++){
-      const p=lo+(hi-lo)*i/steps,y=Math.round(Y(p))+.5;
+      const p=lo+(hi-lo)*i/steps,y=yOf(p);
       ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();
       ctx.fillStyle=C.ink3;ctx.textAlign="left";ctx.textBaseline="middle";
       ctx.fillText(fmtN(p,p>=1000?0:p>=10?1:2),W-padR+8,y);
@@ -879,40 +934,55 @@ function initFibonacciModule(container,opts={}){
       ctx.fillStyle=C.ink3;
       ctx.fillText(fmtDateS(vis[idx].t),clamp(X(start+idx),padL+22,W-padR-22),Hh-padB+7);
     }
-    const xFib0=X(Math.max(sw.A.i,start)),xEnd=W-padR;
-    const gpTop=Y(levelPrice(sw,0.618)),gpBot=Y(levelPrice(sw,0.65));
-    ctx.fillStyle="rgba(217,168,78,.10)";
-    ctx.fillRect(xFib0,Math.min(gpTop,gpBot),xEnd-xFib0,Math.abs(gpBot-gpTop));
-    const lvlLabel=(txt,y,color)=>{
+
+    /* --- 3. líneas de nivel con etiqueta clara (fondo legible) --- */
+    const levLabel=(txt,y,color,strong)=>{
+      ctx.font=(strong?"600 ":"")+"9.5px "+MONO;
+      const w=ctx.measureText(txt).width;
+      ctx.fillStyle="rgba(12,12,10,.6)";
+      ctx.fillRect(xEnd-w-7,y-13,w+6,12);
       ctx.fillStyle=color;ctx.textAlign="right";ctx.textBaseline="bottom";
       ctx.fillText(txt,xEnd-4,y-2);
     };
+    const price=an.price;
     for(const r of RETS){
-      const p=levelPrice(sw,r),y=Math.round(Y(p))+.5;
-      if(y<padT||y>Hh-padB)continue;
-      ctx.strokeStyle="rgba(217,168,78,"+(r===0.618?".7":".38")+")";
-      ctx.lineWidth=r===0.618?1.4:1;
+      const p=levelPrice(sw,r),y=yOf(p);if(!inView(y))continue;
+      const gold=r===0.618;
+      ctx.strokeStyle="rgba(217,168,78,"+(gold?".75":".34")+")";
+      ctx.lineWidth=gold?1.5:1;
       ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();
-      lvlLabel(fmtN(r*100,1)+"%",y,"rgba(232,196,124,.85)");
+      const role=(sw.up?price>=p:price<=p)?"soporte":"resistencia";
+      const txt=fmtN(r*100,1)+"%"+(gold?" · "+role+" clave":r===0.5?" · "+role:"");
+      levLabel(txt,y,gold?C.gink:"rgba(232,196,124,.8)",gold);
     }
-    for(const [pt,lab] of [[sw.A,"origen"],[sw.B,sw.up?"máximo":"mínimo"]]){
-      const y=Math.round(Y(pt.p))+.5;
-      if(y<padT||y>Hh-padB)continue;
-      ctx.strokeStyle="rgba(236,234,217,.4)";ctx.lineWidth=1;
+    // extremos del impulso: B (0%) y A (100% = invalidación)
+    {const y=yOf(sw.B.p);if(inView(y)){
+      ctx.strokeStyle="rgba(236,234,217,.45)";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();
-      lvlLabel(lab+" "+fmtN(pt.p),y,"rgba(236,234,217,.65)");
-    }
+      levLabel("0% · "+(sw.up?"máximo":"mínimo"),y,"rgba(236,234,217,.75)",true);}}
+    {const y=yOf(sw.A.p);if(inView(y)){
+      ctx.strokeStyle="rgba(217,92,92,.5)";ctx.lineWidth=1;ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();ctx.setLineDash([]);
+      levLabel("100% · invalidación",y,C.down,true);}}
+    // extensiones = objetivos
     ctx.setLineDash([5,4]);
+    const extName={1.272:"objetivo 127%",1.618:"objetivo 162% (φ)",2:"objetivo 200%"};
     for(const e of EXTS){
-      const p=extPrice(sw,e),y=Math.round(Y(p))+.5;
-      if(y<padT||y>Hh-padB)continue;
+      const p=extPrice(sw,e),y=yOf(p);if(!inView(y))continue;
       ctx.strokeStyle="rgba(126,163,212,.5)";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(xFib0,y);ctx.lineTo(xEnd,y);ctx.stroke();
-      lvlLabel("ext "+fmtN(e*100,1)+"%",y,"rgba(126,163,212,.85)");
+      levLabel(extName[e],y,"rgba(126,163,212,.9)",e===1.618);
     }
     ctx.setLineDash([]);
+
+    /* --- etiquetas de zona (sobre las bandas) --- */
+    zoneTag("zona de objetivos",ez[0],ez[1],"rgba(126,163,212,.8)");
+    zoneTag("zona de retroceso",rz[0],gz[0],"rgba(232,196,124,.75)");
+    zoneTag("golden pocket ✦",gz[0],gz[1],C.gink);
+
+    /* --- 4. SMA200 (tendencia de fondo) --- */
     const closes=bars.map(b=>b.c);
-    ctx.setLineDash([2,4]);ctx.strokeStyle="rgba(168,165,149,.55)";ctx.lineWidth=1.2;
+    ctx.setLineDash([2,4]);ctx.strokeStyle="rgba(168,165,149,.5)";ctx.lineWidth=1.2;
     ctx.beginPath();let started=false;
     for(let i=start;i<bars.length;i++){
       const v=sma(closes,200,i);if(v==null)continue;
@@ -920,31 +990,60 @@ function initFibonacciModule(container,opts={}){
       if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
     }
     ctx.stroke();ctx.setLineDash([]);
+
+    /* --- 5. precio (área + línea) --- */
     const grd=ctx.createLinearGradient(0,padT,0,Hh-padB);
     grd.addColorStop(0,"rgba(236,234,217,.10)");grd.addColorStop(1,"rgba(236,234,217,0)");
     ctx.beginPath();
     vis.forEach((b,i)=>{const x=X(start+i),y=Y(b.c);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
-    ctx.lineTo(X(bars.length-1),Hh-padB);ctx.lineTo(X(start),Hh-padB);ctx.closePath();
+    ctx.lineTo(X(last),Hh-padB);ctx.lineTo(X(start),Hh-padB);ctx.closePath();
     ctx.fillStyle=grd;ctx.fill();
     ctx.beginPath();
     vis.forEach((b,i)=>{const x=X(start+i),y=Y(b.c);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
     ctx.strokeStyle=C.ink;ctx.lineWidth=1.6;ctx.lineJoin="round";ctx.stroke();
+
+    /* --- 6. flecha del IMPULSO A→B (el movimiento que Fibonacci mide) --- */
+    const ax=X(sw.A.i),ay=Y(sw.A.p),bx=X(sw.B.i),by=Y(sw.B.p);
+    const dirCol=sw.up?"63,179,116":"217,92,92";
+    ctx.strokeStyle="rgba("+dirCol+",.55)";ctx.lineWidth=2;ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();
+    const ang=Math.atan2(by-ay,bx-ax),ah=8;
+    ctx.beginPath();ctx.moveTo(bx,by);
+    ctx.lineTo(bx-ah*Math.cos(ang-0.42),by-ah*Math.sin(ang-0.42));
+    ctx.lineTo(bx-ah*Math.cos(ang+0.42),by-ah*Math.sin(ang+0.42));
+    ctx.closePath();ctx.fillStyle="rgba("+dirCol+",.8)";ctx.fill();
+    {const mtxt="impulso "+fmtPct((sw.B.p/sw.A.p-1)*100,0);
+     // etiqueta cerca de A (tramo bajo del impulso, zona despejada), desplazada del trazo
+     const t=0.3,mx=ax+t*(bx-ax),my=ay+t*(by-ay);
+     ctx.font="600 10px "+MONO;const mw=ctx.measureText(mtxt).width;
+     const lx=clamp(mx-mw/2-4,padL,xEnd-mw-8),ly=my+(sw.up?10:-24);
+     ctx.fillStyle="rgba(12,12,10,.66)";ctx.fillRect(lx,ly,mw+8,14);
+     ctx.fillStyle=sw.up?C.up:C.down;ctx.textAlign="left";ctx.textBaseline="middle";
+     ctx.fillText(mtxt,lx+4,ly+8);}
+
+    /* --- 7. pivotes A y B con nombre --- */
     for(const [pt,isB] of [[sw.A,false],[sw.B,true]]){
       const x=X(pt.i),y=Y(pt.p);
-      ctx.beginPath();ctx.arc(x,y,4,0,7);
+      ctx.beginPath();ctx.arc(x,y,4.5,0,7);
       ctx.fillStyle=C.gold;ctx.fill();
       ctx.lineWidth=2;ctx.strokeStyle="#0c0c0a";ctx.stroke();
-      ctx.fillStyle="rgba(232,196,124,.9)";ctx.textAlign="center";ctx.textBaseline=isB===sw.up?"bottom":"top";
-      ctx.fillText(isB?"B":"A",x,y+(isB===sw.up?-8:8));
+      const lab=isB?"B · fin":"A · inicio";
+      ctx.font="600 9.5px "+MONO;const lw=ctx.measureText(lab).width;
+      const lx=clamp(x-lw/2-3,padL,W-padR-lw-6);
+      const ly=isB===sw.up?y-22:y+8;
+      ctx.fillStyle="rgba(12,12,10,.6)";ctx.fillRect(lx,ly,lw+6,13);
+      ctx.fillStyle=C.gink;ctx.textAlign="left";ctx.textBaseline="top";
+      ctx.fillText(lab,lx+3,ly+2);
     }
-    const py=Math.round(Y(an.price))+.5;
-    ctx.strokeStyle="rgba(236,234,217,.35)";ctx.setLineDash([1,3]);
+
+    /* --- 8. precio actual (dónde estás ahora) --- */
+    const py=yOf(an.price);
+    ctx.strokeStyle="rgba(236,234,217,.4)";ctx.setLineDash([1,3]);
     ctx.beginPath();ctx.moveTo(padL,py);ctx.lineTo(W-padR,py);ctx.stroke();ctx.setLineDash([]);
     const ptxt=fmtN(an.price);
     ctx.font="600 10.5px "+MONO;
     const tw=ctx.measureText(ptxt).width+12;
-    ctx.fillStyle="#26241c";
-    ctx.strokeStyle="rgba(217,168,78,.5)";ctx.lineWidth=1;
+    ctx.fillStyle="#26241c";ctx.strokeStyle="rgba(217,168,78,.55)";ctx.lineWidth=1;
     const rx=W-padR+2,ry=py-9,rw=Math.max(tw,padR-6),rh=18,rr2=4;
     ctx.beginPath();
     ctx.moveTo(rx+rr2,ry);ctx.arcTo(rx+rw,ry,rx+rw,ry+rh,rr2);ctx.arcTo(rx+rw,ry+rh,rx,ry+rh,rr2);
@@ -952,6 +1051,12 @@ function initFibonacciModule(container,opts={}){
     ctx.fill();ctx.stroke();
     ctx.fillStyle=C.gold;ctx.textAlign="left";ctx.textBaseline="middle";
     ctx.fillText(ptxt,W-padR+8,py+0.5);
+    // etiqueta "acá estás" al borde izquierdo de la línea de precio
+    ctx.font="600 9px "+MONO;const nowT="◂ precio hoy";
+    ctx.fillStyle="rgba(12,12,10,.55)";ctx.fillRect(padL+2,py-6,ctx.measureText(nowT).width+6,12);
+    ctx.fillStyle=C.gink;ctx.textAlign="left";ctx.textBaseline="middle";
+    ctx.fillText(nowT,padL+5,py+.5);
+
     bindTooltip(cv);
   }
   function bindTooltip(cv){
