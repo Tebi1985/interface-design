@@ -1,5 +1,7 @@
-name: Deploy Fibonacci analyzer to GitHub Pages
+name: Publish Fibonacci analyzer to GitHub Pages
 
+# El sitio de Pages está configurado en modo "Deploy from a branch" (gh-pages).
+# Este workflow re-publica fibonacci-analyzer/ a esa rama en cada cambio en main.
 on:
   push:
     branches: [main]
@@ -9,27 +11,24 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: fibonacci-analyzer
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Push app to gh-pages branch
+        run: |
+          cd fibonacci-analyzer
+          touch .nojekyll
+          git init -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish fibonacci-analyzer from ${GITHUB_SHA}"
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
