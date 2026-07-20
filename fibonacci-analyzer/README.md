@@ -6,7 +6,12 @@ clara con probabilidades empíricas.
 
 ## Uso
 
-Abrí `index.html` en cualquier navegador moderno e ingresá un ticker
+**Online (recomendado):** https://tebi1985.github.io/interface-design/ —
+se publica automáticamente desde este repo con GitHub Pages. Al correr desde
+una URL real (no un archivo local con `Origin: null`) los proxies CORS
+aceptan el origen y la carga de datos es mucho más confiable.
+
+**Local:** abrí `index.html` en cualquier navegador moderno e ingresá un ticker
 (ej. `AAPL`, `MSFT`, `GGAL.BA`, `SAN.MC`). También hay un **modo demo sin
 conexión** con una serie sintética.
 
